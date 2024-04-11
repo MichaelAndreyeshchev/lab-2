@@ -88,6 +88,7 @@ typedef struct
 	List	   *groupClause;	/* overrides parse->groupClause */
 } standard_qp_extra;
 
+// Lab 2
 #define NESTED_LOOP 0
 #define SORTED_MERGE 1
 #define HASH 2
@@ -302,8 +303,7 @@ standard_planner(Query *parse, int cursorOptions, ParamListInfo boundParams)
 	final_rel = fetch_upper_rel(root, UPPERREL_FINAL, NULL);
 	best_path = get_cheapest_fractional_path(final_rel, tuple_fraction);
 
-	top_plan = create_plan_specific_join(root, best_path, join_type);
-	join_type = (join_type + 1) % 3;
+	top_plan = create_plan(root, best_path);
 
 	/*
 	 * If creating a plan for a scrollable cursor, make sure it can run

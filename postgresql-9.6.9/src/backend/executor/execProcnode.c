@@ -717,6 +717,7 @@ ExecEndNode(PlanState *node)
 
 			/*
 			 * join nodes
+			 * Lab 2
 			 */
 		case T_NestLoopState:
 			ExecEndNestLoop((NestLoopState *) node);

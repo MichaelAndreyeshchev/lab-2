@@ -11,6 +11,9 @@
  *
  *-------------------------------------------------------------------------
  */
+// Lab 2
+extern int join_type;
+
 #ifndef PLANMAIN_H
 #define PLANMAIN_H
 
@@ -48,7 +51,6 @@ extern void preprocess_minmax_aggregates(PlannerInfo *root, List *tlist);
  * prototypes for plan/createplan.c
  */
 extern Plan *create_plan(PlannerInfo *root, Path *best_path);
-extern Plan *create_plan_specific_join(PlannerInfo *root, Path *best_path, int type);
 extern ForeignScan *make_foreignscan(List *qptlist, List *qpqual,
 				 Index scanrelid, List *fdw_exprs, List *fdw_private,
 				 List *fdw_scan_tlist, List *fdw_recheck_quals,

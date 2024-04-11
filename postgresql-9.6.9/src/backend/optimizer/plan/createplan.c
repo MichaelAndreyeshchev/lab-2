@@ -68,14 +68,14 @@
 #define CP_LABEL_TLIST		0x0004		/* tlist must contain sortgrouprefs */
 
 
-
+//Lab 2
 #define NESTED_LOOP 0
 #define SORTED_MERGE 1
 #define HASH 2
 
+
 static Plan *create_plan_recurse(PlannerInfo *root, Path *best_path,
 					int flags);
-static Plan *create_plan_recurse_specific_join(PlannerInfo *root, Path *best_path, int flags, int type);
 static Plan *create_scan_plan(PlannerInfo *root, Path *best_path,
 				 int flags);
 static List *build_path_tlist(PlannerInfo *root, Path *path);
@@ -84,7 +84,6 @@ static List *get_gating_quals(PlannerInfo *root, List *quals);
 static Plan *create_gating_plan(PlannerInfo *root, Path *path, Plan *plan,
 				   List *gating_quals);
 static Plan *create_join_plan(PlannerInfo *root, JoinPath *best_path);
-static Plan *create_join_plan_specific_join(PlannerInfo *root, JoinPath *best_path, int join_type);
 static Plan *create_append_plan(PlannerInfo *root, AppendPath *best_path);
 static Plan *create_merge_append_plan(PlannerInfo *root, MergeAppendPath *best_path);
 static Result *create_result_plan(PlannerInfo *root, ResultPath *best_path);
@@ -341,53 +340,6 @@ create_plan(PlannerInfo *root, Path *best_path)
 	return plan;
 }
 
-Plan *
-create_plan_specific_join(PlannerInfo *root, Path *best_path, int type)
-{
-	Plan	   *plan;
-
-	/* plan_params should not be in use in current query level */
-	Assert(root->plan_params == NIL);
-
-	/* Initialize this module's private workspace in PlannerInfo */
-	root->curOuterRels = NULL;
-	root->curOuterParams = NIL;
-
-	/* Recursively process the path tree, demanding the correct tlist result */
-	plan = create_plan_recurse_specific_join(root, best_path, CP_EXACT_TLIST, type);
-
-	/*
-	 * Make sure the topmost plan node's targetlist exposes the original
-	 * column names and other decorative info.  Targetlists generated within
-	 * the planner don't bother with that stuff, but we must have it on the
-	 * top-level tlist seen at execution time.  However, ModifyTable plan
-	 * nodes don't have a tlist matching the querytree targetlist.
-	 */
-	if (!IsA(plan, ModifyTable))
-		apply_tlist_labeling(plan->targetlist, root->processed_tlist);
-
-	/*
-	 * Attach any initPlans created in this query level to the topmost plan
-	 * node.  (In principle the initplans could go in any plan node at or
-	 * above where they're referenced, but there seems no reason to put them
-	 * any lower than the topmost node for the query level.  Also, see
-	 * comments for SS_finalize_plan before you try to change this.)
-	 */
-	SS_attach_initplans(root, plan);
-
-	/* Check we successfully assigned all NestLoopParams to plan nodes */
-	if (root->curOuterParams != NIL)
-		elog(ERROR, "failed to assign all NestLoopParams to plan nodes");
-
-	/*
-	 * Reset plan_params to ensure param IDs used for nestloop params are not
-	 * re-used later
-	 */
-	root->plan_params = NIL;
-
-	return plan;
-}
-
 /*
  * create_plan_recurse
  *	  Recursive guts of create_plan().
@@ -422,144 +374,6 @@ create_plan_recurse(PlannerInfo *root, Path *best_path, int flags)
 		case T_NestLoop:
 			plan = create_join_plan(root,
 									(JoinPath *) best_path);
-			break;
-		case T_Append:
-			plan = create_append_plan(root,
-									  (AppendPath *) best_path);
-			break;
-		case T_MergeAppend:
-			plan = create_merge_append_plan(root,
-											(MergeAppendPath *) best_path);
-			break;
-		case T_Result:
-			if (IsA(best_path, ProjectionPath))
-			{
-				plan = create_projection_plan(root,
-											  (ProjectionPath *) best_path);
-			}
-			else if (IsA(best_path, MinMaxAggPath))
-			{
-				plan = (Plan *) create_minmaxagg_plan(root,
-												(MinMaxAggPath *) best_path);
-			}
-			else
-			{
-				Assert(IsA(best_path, ResultPath));
-				plan = (Plan *) create_result_plan(root,
-												   (ResultPath *) best_path);
-			}
-			break;
-		case T_Material:
-			plan = (Plan *) create_material_plan(root,
-												 (MaterialPath *) best_path,
-												 flags);
-			break;
-		case T_Unique:
-			if (IsA(best_path, UpperUniquePath))
-			{
-				plan = (Plan *) create_upper_unique_plan(root,
-											   (UpperUniquePath *) best_path,
-														 flags);
-			}
-			else
-			{
-				Assert(IsA(best_path, UniquePath));
-				plan = create_unique_plan(root,
-										  (UniquePath *) best_path,
-										  flags);
-			}
-			break;
-		case T_Gather:
-			plan = (Plan *) create_gather_plan(root,
-											   (GatherPath *) best_path);
-			break;
-		case T_Sort:
-			plan = (Plan *) create_sort_plan(root,
-											 (SortPath *) best_path,
-											 flags);
-			break;
-		case T_Group:
-			plan = (Plan *) create_group_plan(root,
-											  (GroupPath *) best_path);
-			break;
-		case T_Agg:
-			if (IsA(best_path, GroupingSetsPath))
-				plan = create_groupingsets_plan(root,
-											 (GroupingSetsPath *) best_path);
-			else
-			{
-				Assert(IsA(best_path, AggPath));
-				plan = (Plan *) create_agg_plan(root,
-												(AggPath *) best_path);
-			}
-			break;
-		case T_WindowAgg:
-			plan = (Plan *) create_windowagg_plan(root,
-												(WindowAggPath *) best_path);
-			break;
-		case T_SetOp:
-			plan = (Plan *) create_setop_plan(root,
-											  (SetOpPath *) best_path,
-											  flags);
-			break;
-		case T_RecursiveUnion:
-			plan = (Plan *) create_recursiveunion_plan(root,
-										   (RecursiveUnionPath *) best_path);
-			break;
-		case T_LockRows:
-			plan = (Plan *) create_lockrows_plan(root,
-												 (LockRowsPath *) best_path,
-												 flags);
-			break;
-		case T_ModifyTable:
-			plan = (Plan *) create_modifytable_plan(root,
-											  (ModifyTablePath *) best_path);
-			break;
-		case T_Limit:
-			plan = (Plan *) create_limit_plan(root,
-											  (LimitPath *) best_path,
-											  flags);
-			break;
-		default:
-			elog(ERROR, "unrecognized node type: %d",
-				 (int) best_path->pathtype);
-			plan = NULL;		/* keep compiler quiet */
-			break;
-	}
-
-	return plan;
-}
-
-static Plan *
-create_plan_recurse_specific_join(PlannerInfo *root, Path *best_path, int flags, int type)
-{
-	Plan	   *plan;
-
-	/* Guard against stack overflow due to overly complex plans */
-	check_stack_depth();
-
-	switch (best_path->pathtype)
-	{
-		case T_SeqScan:
-		case T_SampleScan:
-		case T_IndexScan:
-		case T_IndexOnlyScan:
-		case T_BitmapHeapScan:
-		case T_TidScan:
-		case T_SubqueryScan:
-		case T_FunctionScan:
-		case T_ValuesScan:
-		case T_CteScan:
-		case T_WorkTableScan:
-		case T_ForeignScan:
-		case T_CustomScan:
-			plan = create_scan_plan(root, best_path, flags);
-			break;
-		case T_HashJoin:
-		case T_MergeJoin:
-		case T_NestLoop:
-			plan = create_join_plan_specific_join(root,
-									(JoinPath *) best_path, type);
 			break;
 		case T_Append:
 			plan = create_append_plan(root,
@@ -1093,62 +907,10 @@ create_gating_plan(PlannerInfo *root, Path *path, Plan *plan,
  * create_join_plan
  *	  Create a join plan for 'best_path' and (recursively) plans for its
  *	  inner and outer paths.
+ * Lab 2
  */
 static Plan *
 create_join_plan(PlannerInfo *root, JoinPath *best_path)
-{
-	Plan	   *plan;
-	List	   *gating_clauses;
-
-			switch (best_path->path.pathtype)
-	{
-		case T_MergeJoin:
-			plan = (Plan *) create_mergejoin_plan(root,
-												  (MergePath *) best_path);
-			break;
-		case T_HashJoin:
-			plan = (Plan *) create_hashjoin_plan(root,
-												 (HashPath *) best_path);
-			break;
-		case T_NestLoop:
-			plan = (Plan *) create_nestloop_plan(root,
-												 (NestPath *) best_path);
-			break;
-		default:
-			elog(ERROR, "unrecognized node type: %d",
-				 (int) best_path->path.pathtype);
-			plan = NULL;		/* keep compiler quiet */
-			break;
-	}
-
-	/*
-	 * If there are any pseudoconstant clauses attached to this node, insert a
-	 * gating Result node that evaluates the pseudoconstants as one-time
-	 * quals.
-	 */
-	gating_clauses = get_gating_quals(root, best_path->joinrestrictinfo);
-	if (gating_clauses)
-		plan = create_gating_plan(root, (Path *) best_path, plan,
-								  gating_clauses);
-
-#ifdef NOT_USED
-
-	/*
-	 * * Expensive function pullups may have pulled local predicates * into
-	 * this path node.  Put them in the qpqual of the plan node. * JMH,
-	 * 6/15/92
-	 */
-	if (get_loc_restrictinfo(best_path) != NIL)
-		set_qpqual((Plan) plan,
-				   list_concat(get_qpqual((Plan) plan),
-					   get_actual_clauses(get_loc_restrictinfo(best_path))));
-#endif
-
-	return plan;
-}
-
-static Plan *
-create_join_plan_specific_join(PlannerInfo *root, JoinPath *best_path, int join_type)
 {
 	Plan	   *plan;
 	List	   *gating_clauses;
@@ -1173,6 +935,7 @@ create_join_plan_specific_join(PlannerInfo *root, JoinPath *best_path, int join_
 				 	(int) best_path->path.pathtype);
 				plan = NULL;		/* keep compiler quiet */
 			}
+	join_type = (join_type + 1) % 3;
 
 	/*
 	 * If there are any pseudoconstant clauses attached to this node, insert a
